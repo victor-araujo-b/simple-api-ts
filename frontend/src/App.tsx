@@ -1,72 +1,107 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axios, { AxiosError } from 'axios';
+import { Dashboard } from './components/Dashboard';
 
 function App() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLogin, setIsLogin] = useState(true);
+  const [user, setUser] = useState(null);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  // 1. Função de Logout (precisa estar acima do useEffect se for usada nele)
+  const handleLogout = () => {
+    localStorage.removeItem('@App:token');
+    setUser(null);
+  };
+
+  // 2. useEffect corrigido
+  useEffect(() => {
+    // Movemos a função para dentro para o React saber que ela não mudará
+    const fetchUserData = async (token: string) => {
+      try {
+        const res = await axios.get('http://localhost:3000/api/users/me', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setUser(res.data);
+      } catch {
+        handleLogout();
+      }
+    };
+
+    const token = localStorage.getItem('@App:token');
+    if (token) {
+      fetchUserData(token);
+    }
+  }, []); // Agora o array vazio não reclama, pois a função está interna
+
+  // 3. handleAuth corrigido (sem o 'any' genérico)
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    const route = isLogin ? 'login' : 'register';
+    const body = isLogin ? { email, password } : { name, email, password };
+
     try {
-      const response = await axios.post('http://localhost:3000/api/auth/login', {
-        email,
-        password
-      });
-      
-      // Salva o token no navegador para usarmos depois
-      localStorage.setItem('@App:token', response.data.token);
-      
-      alert('Login realizado com sucesso!');
-    } catch (error) {
-      const err = error as AxiosError<{ message: string }>;
-      alert('Erro: ' + (err.response?.data?.message || 'Servidor offline'));
+      const { data } = await axios.post(`http://localhost:3000/api/auth/${route}`, body);
+      localStorage.setItem('@App:token', data.token);
+      setUser(data.user);
+    } catch (err) {
+
+      const error = err as AxiosError<{ message: string }>;
+      alert(error.response?.data?.message || 'Erro na operação');
     }
   };
 
+  if (user) {
+    return <Dashboard user={user} onLogout={handleLogout} />;
+  }
+
   return (
-    // Centraliza tudo na tela com cores suaves
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
-        <h2 className="text-2xl font-bold text-gray-800 text-center mb-6">
-          Bem-vindo de volta
+        <h2 className="text-2xl font-bold text-center mb-6">
+          {isLogin ? 'Login' : 'Cadastro'}
         </h2>
-
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleAuth} className="space-y-4">
+          {!isLogin && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Nome</label>
+              <input 
+                type="text" 
+                className="w-full p-2 border rounded focus:ring-blue-500 outline-none" 
+                onChange={e => setName(e.target.value)} 
+                required 
+              />
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700">E-mail</label>
             <input 
               type="email" 
-              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-              placeholder="seu@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
+              className="w-full p-2 border rounded focus:ring-blue-500 outline-none" 
+              onChange={e => setEmail(e.target.value)} 
+              required 
             />
           </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700">Senha</label>
             <input 
               type="password" 
-              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
+              className="w-full p-2 border rounded focus:ring-blue-500 outline-none" 
+              onChange={e => setPassword(e.target.value)} 
+              required 
             />
           </div>
-
-          <button 
-            type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-md transition-colors shadow-md"
-          >
-            Entrar no Sistema
+          <button className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition-colors">
+            {isLogin ? 'Entrar' : 'Criar Conta'}
           </button>
         </form>
-
-        <p className="mt-4 text-center text-sm text-gray-600">
-          Não tem uma conta? <a href="#" className="text-blue-600 hover:underline">Cadastre-se</a>
-        </p>
+        <button 
+          onClick={() => setIsLogin(!isLogin)} 
+          className="w-full mt-4 text-sm text-blue-500 hover:underline"
+        >
+          {isLogin ? 'Ainda não tem conta? Cadastre-se' : 'Já tem conta? Faça Login'}
+        </button>
       </div>
     </div>
   );
